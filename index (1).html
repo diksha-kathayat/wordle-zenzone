@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Glow Word ✨</title>
+    <style>
+        :root {
+            --bg: #fff5f5;
+            --text-dark: #664d51;
+            --border-light: #fcd0d7;
+            --correct: #84a59d; 
+            --present: #f7d1cd; 
+            --absent: #b5a6a8;  
+            --cell-empty: #ffffff;
+        }
+
+        * { box-sizing: border-box; touch-action: manipulation; user-select: none; }
+        
+        body { 
+            margin: 0; padding: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center; 
+            height: 100vh; width: 100vw; overflow: hidden; position: fixed;
+            background-image: radial-gradient(#ffe3e8 1.5px, transparent 1.5px);
+            background-size: 24px 24px;
+        }
+
+        #game-layout {
+            display: flex; 
+            flex-direction: column;
+            gap: 12px; 
+            align-items: center; 
+            justify-content: space-between; 
+            width: 95vw; 
+            max-width: 330px;
+            height: 82svh; 
+        }
+
+        #header {
+            display: flex; width: 100%; justify-content: space-between; align-items: center;
+            background: rgba(255, 255, 255, 0.85); border: 1.5px solid #fff;
+            border-radius: 12px; padding: 8px 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+        }
+
+        h1 { margin: 0; font-size: 18px; color: var(--text-dark); letter-spacing: 1px; font-weight: 800; }
+
+        .btn-restart {
+            padding: 4px 10px; background: #fff; color: var(--text-dark); 
+            border: 1px solid var(--border-light); border-radius: 8px; 
+            font-size: 10px; text-transform: uppercase; font-weight: bold; cursor: pointer;
+        }
+
+        /* 5x6 GAME GUESS FIELD */
+        #grid {
+            display: grid; grid-template-rows: repeat(6, 1fr);
+            gap: 5px; width: 100%; max-width: 240px; flex: 1; max-height: 290px;
+        }
+
+        .grid-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+
+        .cell {
+            background: var(--cell-empty); border: 2px solid var(--border-light);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 800; color: var(--text-dark); text-transform: uppercase;
+            aspect-ratio: 1; transition: all 0.15s ease;
+        }
+
+        .cell.pop { transform: scale(1.08); border-color: var(--text-dark); }
+
+        /* Colored Evaluation Status Classes */
+        .cell.correct { background: var(--correct) !important; border-color: var(--correct); color: #fff; }
+        .cell.present { background: var(--present) !important; border-color: var(--present); color: #fff; }
+        .cell.absent { background: var(--absent) !important; border-color: var(--absent); color: #fff; }
+
+        /* THE VISUAL TRACKING RACK */
+        #keyboard-preview { display: flex; flex-direction: column; gap: 3px; width: 100%; }
+        .kb-row { display: flex; justify-content: center; gap: 2.5px; width: 100%; }
+
+        .key-tile {
+            background: #ffffff; border: 1px solid var(--border-light);
+            color: var(--text-dark); border-radius: 4px; height: 28px; flex: 1;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold; text-transform: uppercase;
+        }
+
+        .key-tile.correct { background: var(--correct); color: #fff; border-color: var(--correct); }
+        .key-tile.present { background: var(--present); color: #fff; border-color: var(--present); }
+        .key-tile.absent { background: var(--absent); color: #fff; border-color: var(--absent); }
+
+        /* HIDDEN ENGINE INPUT LAYER */
+        #hidden-input {
+            position: absolute; top: -100px; left: -100px;
+            width: 10px; height: 10px; opacity: 0; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<input type="text" id="hidden-input" autocomplete="off" autocapitalize="characters" maxlength="5">
+
+<div id="game-layout">
+    <div id="header">
+        <h1>GLOW WORD ✧</h1>
+        <button class="btn-restart" id="btn-reset">New</button>
+    </div>
+
+    <div id="grid" onclick="focusKeyboard()"></div>
+
+    <div id="keyboard-preview">
+        <div class="kb-row" id="row-1"></div>
+        <div class="kb-row" id="row-2"></div>
+        <div class="kb-row" id="row-3"></div>
+    </div>
+</div>
+
+<script>
+    const gridEl = document.getElementById('grid');
+    const resetBtn = document.getElementById('btn-reset');
+    const inputEl = document.getElementById('hidden-input');
+
+    const wordList = ["CLOUD", "SWEET", "DREAM", "LIGHT", "GLOWS", "PLANT", "BEACH", "SPARK", "CHILL", "HAPPY", "PEACH", "FRESH"];
+    let secretWord = "";
+    
+    let guesses = Array(6).fill(""); 
+    let currentRow = 0;
+    let gameOver = false;
+
+    const row1Keys = "qwertyuiop".split("");
+    const row2Keys = "asdfghjkl".split("");
+    const row3Keys = "zxcvbnm".split("");
+
+    function init() {
+        secretWord = wordList[Math.floor(Math.random() * wordList.length)];
+        gridEl.innerHTML = '';
+        guesses = Array(6).fill("");
+        currentRow = 0;
+        gameOver = false;
+        inputEl.value = "";
+
+        for (let r = 0; r < 6; r++) {
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'grid-row';
+            for (let c = 0; c < 5; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                rowDiv.appendChild(cell);
+            }
+            gridEl.appendChild(rowDiv);
+        }
+
+        buildKeyboardTracker();
+        focusKeyboard();
+    }
+
+    function buildKeyboardTracker() {
+        const populateRow = (rowId, letters) => {
+            const row = document.getElementById(rowId);
+            row.innerHTML = '';
+            letters.forEach(l => {
+                const tile = document.createElement('div');
+                tile.className = 'key-tile';
+                tile.innerText = l;
+                tile.dataset.letter = l;
+                row.appendChild(tile);
+            });
+        };
+        populateRow('row-1', row1Keys);
+        populateRow('row-2', row2Keys);
+        populateRow('row-3', row3Keys);
+    }
+
+    function focusKeyboard() {
+        if (!gameOver) {
+            inputEl.focus();
+        }
+    }
+
+    // Capture physical and touch inputs via native field proxy
+    inputEl.addEventListener('input', (e) => {
+        if (gameOver) return;
+        
+        // Clean characters, allowing only normal letters
+        let cleanVal = inputEl.value.replace(/[^a-zA-Z]/g, '').toUpperCase();
+        guesses[currentRow] = cleanVal;
+        render();
+    });
+
+    // Listen for Enter / Submit keys directly through the hidden keyboard listener
+    inputEl.addEventListener('keydown', (e) => {
+        if (gameOver) return;
+
+        if (e.key === 'Enter') {
+            if (guesses[currentRow].length === 5) {
+                evaluateGuess();
+            }
+        }
+    });
+
+    // Force keyboard to remain open if user clicks on the background canvas
+    document.body.addEventListener('click', (e) => {
+        if (e.target !== resetBtn) {
+            focusKeyboard();
+        }
+    });
+
+    function evaluateGuess() {
+        const guess = guesses[currentRow];
+        const secretArr = secretWord.split("");
+        const guessArr = guess.split("");
+        const rowCells = gridEl.children[currentRow].children;
+
+        let statuses = Array(5).fill('absent');
+
+        // Pass 1: True Matches
+        for (let i = 0; i < 5; i++) {
+            if (guessArr[i] === secretArr[i]) {
+                statuses[i] = 'correct';
+                secretArr[i] = null;
+                guessArr[i] = null;
+            }
+        }
+
+        // Pass 2: Misplaced Matches
+        for (let i = 0; i < 5; i++) {
+            if (guessArr[i] !== null) {
+                const targetIdx = secretArr.indexOf(guessArr[i]);
+                if (targetIdx !== -1) {
+                    statuses[i] = 'present';
+                    secretArr[targetIdx] = null;
+                }
+            }
+        }
+
+        // Apply colors and update the key tracker
+        for (let i = 0; i < 5; i++) {
+            const cell = rowCells[i];
+            const letter = guess.charAt(i).toLowerCase();
+            const tileEl = document.querySelector(`.key-tile[data-letter="${letter}"]`);
+            
+            cell.classList.add(statuses[i]);
+            
+            if (tileEl) {
+                if (statuses[i] === 'correct') {
+                    tileEl.className = 'key-tile correct';
+                } else if (statuses[i] === 'present' && !tileEl.classList.contains('correct')) {
+                    tileEl.className = 'key-tile present';
+                } else if (statuses[i] === 'absent' && !tileEl.classList.contains('correct') && !tileEl.classList.contains('present')) {
+                    tileEl.className = 'key-tile absent';
+                }
+            }
+        }
+
+        if (guess === secretWord) {
+            gameOver = true;
+            setTimeout(() => alert("✧ Fantastic! You solved it! ✧"), 200);
+            return;
+        }
+
+        currentRow++;
+        inputEl.value = ""; // Flush the input box clean for the next row
+
+        if (currentRow >= 6) {
+            gameOver = true;
+            setTimeout(() => alert(`Game Over! The word was: ${secretWord}`), 200);
+        }
+    }
+
+    function render() {
+        const rowCells = gridEl.children[currentRow].children;
+        const currentGuess = guesses[currentRow] || "";
+        
+        for (let c = 0; c < 5; c++) {
+            const cell = rowCells[c];
+            const letter = currentGuess.charAt(c);
+            const oldLetter = cell.innerText;
+            cell.innerText = letter;
+
+            // Bounce pop trigger animation rules mapping
+            if (letter && !oldLetter) {
+                cell.classList.add('pop');
+                setTimeout(() => cell.classList.remove('pop'), 80);
+            }
+        }
+    }
+
+    // Reset game hooks
+    resetBtn.onclick = (e) => { e.preventDefault(); init(); };
+
+    init();
+</script>
+</body>
+</html>
